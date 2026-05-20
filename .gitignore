@@ -1,0 +1,22 @@
+# ==========================================
+# James's ETF_Replicate Project .gitignore
+# ==========================================
+
+# 1. 데이터 폴더 전체 제외 (상대경로)
+# Data 폴더와 그 하위의 Raw_Data, ETF_PDF 내부 모든 파일 업로드 방지
+Data/
+
+# 2. 혹시 모를 예외 방지를 위한 확장자별 차단
+*.csv
+*.xlsx
+*.pdf
+*.pkl
+
+# 3. 파이썬 실행 시 자동 생성되는 캐시 및 임시 파일 제외
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 4. Visual Studio / VS Code 설정 폴더 제외
+.vs/
+.vscode/
