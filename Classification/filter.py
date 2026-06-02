@@ -2,7 +2,8 @@ import pandas as pd
 from pathlib import Path
 
 # 제외 키워드 목록
-EXCLUDE_KEYWORDS = ['인버스', '레버리지', '액티브', '고배당', '배당', '커버드콜', '리츠', 'reits', '채권', '혼합', '선물']
+EXCLUDE_KEYWORDS = ['인버스', '레버리지', '액티브', '고배당', '배당', '커버드콜', '리츠', 'reits', '채권', 
+                    '혼합', '선물', '대만', '합성', '장기채']
 
 def run_filter(df, output_dir: Path):
     """
