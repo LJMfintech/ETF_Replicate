@@ -33,10 +33,8 @@ df_list.columns = df_list.columns.astype(str).str.strip()
 
 # 컬럼명 
 col_date = '날짜'      
-col_code = 'ETF코드'   
+col_code = '코드'   
 col_listing_date = '상장일'
-
-# 🔥 [핵심 수정] 엑셀 J열에 있는 완벽한 분류 열 이름 사용!
 col_category = 'Category' 
 
 col_aum = next((c for c in df_data.columns if 'AUM' in c), None)
@@ -70,7 +68,7 @@ df_data[col_fee] = pd.to_numeric(df_data[col_fee].astype(str).str.replace(',', '
 
 
 # ==========================================
-# 2. 차별화 지수 산출 함수 (동일)
+# 2. 차별화 지수 산출 함수 (누락 추적 로직 추가)
 # ==========================================
 def calculate_differentiation_at_date(target_date_obj, active_etfs):
     target_date_str = target_date_obj.strftime('%Y-%m-%d')
@@ -87,8 +85,10 @@ def calculate_differentiation_at_date(target_date_obj, active_etfs):
         return pd.DataFrame()
 
     market_weights = {}
-    missing_files_count = 0
-    empty_files_count = 0
+    
+    # 💥 누락 종목 분석을 위한 추적 백그라운드 리스트 생성
+    missing_files_list = []
+    empty_files_list = []
 
     for idx, etf_code in enumerate(active_etfs, 1):
         file_pattern = os.path.join(pdf_folder, f"*{etf_code}*.xlsx")
@@ -100,7 +100,7 @@ def calculate_differentiation_at_date(target_date_obj, active_etfs):
                 df_pdf = pd.read_excel(file_path, header=5)
                 
                 if df_pdf.empty or len(df_pdf.columns) < 2:
-                    empty_files_count += 1
+                    empty_files_list.append(etf_code)
                     continue
 
                 df_pdf.columns = df_pdf.columns.astype(str).str.strip()
@@ -111,7 +111,7 @@ def calculate_differentiation_at_date(target_date_obj, active_etfs):
                     df_pdf = df_pdf[df_pdf['날짜_정제'] == target_date_num_str]
 
                 if df_pdf.empty:
-                    empty_files_count += 1
+                    empty_files_list.append(etf_code)
                     continue
 
                 col_pdf_name = '구성종목'
@@ -125,28 +125,43 @@ def calculate_differentiation_at_date(target_date_obj, active_etfs):
                 df_pdf = df_pdf.dropna(subset=[col_pdf_name, col_pdf_weight])
                 
                 if df_pdf.empty:
-                    empty_files_count += 1
+                    empty_files_list.append(etf_code)
                     continue
 
                 weights = dict(zip(df_pdf[col_pdf_name], df_pdf[col_pdf_weight]))
                 market_weights[etf_code] = weights
 
             except Exception:
-                empty_files_count += 1
+                empty_files_list.append(etf_code)
         else:
-            missing_files_count += 1
+            missing_files_list.append(etf_code)
 
         if idx % 50 == 0 or idx == total_etfs:
             progress_pct = (idx / total_etfs) * 100
             print(f"⏳ Progress: [{idx}/{total_etfs}] 완료 ({progress_pct:.1f}%)")
 
-    print(f"\n=> 📂 수집 완료 (성공: {len(market_weights)}개 | 누락: {missing_files_count}개 | 내용없음: {empty_files_count}개)")
+    print(f"\n=> 📂 수집 완료 (성공: {len(market_weights)}개 | 누락: {len(missing_files_list)}개 | 내용없음/날짜미매칭: {len(empty_files_list)}개)")
+
+    # 💥 [추가 로직] 인간용 가독성 마스터 결합 처리 (엑셀 데이터 기준 매칭)
+    name_col = '코드명' if '코드명' in df_list.columns else next((c for c in df_list.columns if '명' in c or '이름' in c), None)
+
+    if len(missing_files_list) > 0:
+        print("\n❌ [경고] PDF 파일 자체가 폴더에 존재하지 않는 종목 (누락):")
+        for code in missing_files_list:
+            etf_name = df_list[df_list[col_code] == code][name_col].values[0] if code in df_list[col_code].values and name_col else "이름 미확인"
+            print(f"   - 코드: {code} | ETF명: {etf_name}")
+
+    if len(empty_files_list) > 0:
+        print("\n⚠️ [확인] 파일은 있으나 텅 비었거나 해당 날짜 데이터가 없는 종목 (내용없음):")
+        for code in empty_files_list:
+            etf_name = df_list[df_list[col_code] == code][name_col].values[0] if code in df_list[col_code].values and name_col else "이름 미확인"
+            print(f"   - 코드: {code} | ETF명: {etf_name}")
 
     if not market_weights:
         print(f"⚠️ 연산 가능한 PDF 데이터가 없습니다.")
         return pd.DataFrame()
 
-    print("🧮 코사인 유사도 마켓 매트릭스 연산 중...")
+    print("\n🧮 코사인 유사도 마켓 매트릭스 연산 중...")
     all_stocks = sorted(list(set(stock for w in market_weights.values() for stock in w.keys())))
     matrix_data = [[w.get(stock, 0.0) for stock in all_stocks] for w in market_weights.values()]
     df_matrix = pd.DataFrame(matrix_data, index=market_weights.keys(), columns=all_stocks)
@@ -172,13 +187,11 @@ date_25_str = '2025-12-30'
 def process_market_snapshot(date_str):
     target_dt = pd.to_datetime(date_str)
 
-    # 1. 엑셀의 상장일 기준으로 유효한 종목만 뽑기
     if col_listing_date in df_list.columns:
         valid_by_listing = df_list[df_list[col_listing_date] <= target_dt][col_code].unique()
     else:
         valid_by_listing = df_list[col_code].unique()
 
-    # 2. 패널 CSV 데이터 필터링
     df_snapshot = df_data[
         (df_data[col_date] == target_dt) &
         (df_data[col_code].isin(valid_by_listing)) &
@@ -191,16 +204,13 @@ def process_market_snapshot(date_str):
     if len(active_etfs) == 0:
         return pd.DataFrame()
 
-    # 3. 차별화 지수(Product Differentiation) 연산
     df_diff = calculate_differentiation_at_date(target_dt, active_etfs)
     if df_diff.empty:
         return pd.DataFrame()
 
-    # 4. 결합: 패널 데이터 + 차별화 지수 + 엑셀 리스트(Category 열 포함!)
     df_merged = pd.merge(df_snapshot, df_diff, on=col_code, how='inner')
     df_merged = pd.merge(df_merged, df_list[[col_code, col_category]], on=col_code, how='left')
 
-    # 보수율 단위 통일
     if df_merged[col_fee].max() <= 1.0:
         df_merged['Fee_bps'] = df_merged[col_fee] * 10000
     else:
@@ -213,57 +223,46 @@ data_25 = process_market_snapshot(date_25_str)
 
 
 # ==========================================
-<<<<<<< HEAD
-# [추가] 3-1. 좌측 상단 이상치(Fee > 2000bps) 종목 추적
+# 3-1. 시점별 전체 마스터 결과 데이터 CSV 저장
 # ==========================================
 print("\n" + "="*80)
-print(" 🔍 좌측 상단 이상치 영역 (수수료 > 2000bps) 종목 역추적 시작")
-print("="*80)
+print(" 💾 2015년 및 2025년 전체 결합 데이터(마스터) 파일 저장 시작")
+print("=" * 80)
 
-# 2015년과 2025년 데이터 중에서 수수료가 2,000bps를 초과하는 종목 필터링
-outliers_15 = data_15[data_15['Fee_bps'] > 2000].copy() if not data_15.empty else pd.DataFrame()
-outliers_25 = data_25[data_25['Fee_bps'] > 2000].copy() if not data_25.empty else pd.DataFrame()
-
-# 두 시점의 이상치 데이터에 연도 표기 추가 후 병합
-if not outliers_15.empty: outliers_15['Snapshot_Year'] = 2015
-if not outliers_25.empty: outliers_25['Snapshot_Year'] = 2025
-
-df_outliers_all = pd.concat([outliers_15, outliers_25], ignore_index=True)
-
-if not df_outliers_all.empty:
-    # 엑셀 원본 리스트(df_list)에 '코드명'이나 '종목명' 컬럼이 있다면 함께 매칭해서 보여주기 위해 결합
-    # df_list에 '코드명' 혹은 'ETF명' 등 텍스트 컬럼이 있다면 아래 리스트에 추가해 주세요.
-    name_col = next((c for c in df_list.columns if '명' in c or '이름' in c or 'Name' in c), None)
-    
-    if name_col:
-        df_outliers_all = pd.merge(df_outliers_all, df_list[[col_code, name_col]], on=col_code, how='left')
-        display_cols = ['Snapshot_Year', col_code, name_col, col_category, col_aum, col_fee, 'Fee_bps', 'Product_Differentiation']
-    else:
-        display_cols = ['Snapshot_Year', col_code, col_category, col_aum, col_fee, 'Fee_bps', 'Product_Differentiation']
-        
-    print(f"🚨 총 {len(df_outliers_all)}개의 이상치 종목이 발견되었습니다:\n")
-    print(df_outliers_all[display_cols].to_string(index=False))
-    print("-" * 80)
-    
-    # 분석 편의를 위해 엑셀 파일로도 저장 처리
-    outlier_file_path = os.path.join(base_dir, "Data_result", "ETF_Figure4_Outliers.xlsx")
-    df_outliers_all[display_cols].to_excel(outlier_file_path, index=False)
-    print(f"💾 이상치 종목 상세 리스트가 엑셀 파일로 저장되었습니다:\n-> {outlier_file_path}")
-    
+if '코드명' in df_list.columns:
+    df_meta_names = df_list[[col_code, '코드명']].drop_duplicates(subset=[col_code])
 else:
-    print("❌ 조건에 맞는 이상치 종목을 찾지 못했습니다. 필터링 조건을 확인해 주세요.")
+    df_meta_names = pd.DataFrame(columns=[col_code, '코드명'])
+
+final_cols_layout = ['코드', '코드명', 'Category', col_aum, col_fee, 'Fee_bps', 'Product_Differentiation']
+
+if not data_15.empty:
+    if '코드명' in df_meta_names.columns:
+        data_15 = pd.merge(data_15, df_meta_names, on=col_code, how='left')
+    actual_cols_15 = [c for c in final_cols_layout if c in data_15.columns]
+    df_save_15 = data_15[actual_cols_15].copy()
+    path_csv_15 = os.path.join(base_dir, "Data_result", "ETF_Market_Data_2015.csv")
+    df_save_15.to_csv(path_csv_15, index=False, encoding='utf-8-sig')
+    print(f"✅ [2015년] 전체 데이터 ({len(df_save_15)}개 종목) 저장 완료 -> {path_csv_15}")
+else:
+    print("❌ [2015년] 대상 데이터가 없어 파일 저장을 건너뜁니다.")
+
+if not data_25.empty:
+    if '코드명' in df_meta_names.columns:
+        data_25 = pd.merge(data_25, df_meta_names, on=col_code, how='left')
+    actual_cols_25 = [c for c in final_cols_layout if c in data_25.columns]
+    df_save_25 = data_25[actual_cols_25].copy()
+    path_csv_25 = os.path.join(base_dir, "Data_result", "ETF_Market_Data_2025.csv")
+    df_save_25.to_csv(path_csv_25, index=False, encoding='utf-8-sig')
+    print(f"✅ [2025년] 전체 데이터 ({len(df_save_25)}개 종목) 저장 완료 -> {path_csv_25}")
+else:
+    print("❌ [2025년] 대상 데이터가 없어 파일 저장을 건너뜁니다.")
 
 print("="*80)
-
-
-
-
 
 
 # ==========================================
-=======
->>>>>>> 3881fa0318c96bad31cccd5846f314262862988e
-# 4. 버블 차트 시각화 (J열 Category 기준)
+# 4. 버블 차트 시각화
 # ==========================================
 print("\n📊 버블 차트를 렌더링합니다...")
 fig, axes = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
@@ -273,7 +272,6 @@ def plot_panel(ax, data, title):
     ax.set_title(title, fontsize=14, pad=15)
     
     if not data.empty and col_category in data.columns:
-        # 🔥 [핵심 반영] 엑셀 J열 'Category' 값을 그대로 사용하여 완벽하게 나눕니다!
         b_data = data[data[col_category] == 'Broad-based']
         s_data = data[data[col_category] == 'Specialized']
         
