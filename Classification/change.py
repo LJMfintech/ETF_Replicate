@@ -80,8 +80,8 @@ for j in range(1, raw.shape[1]):
             raw.iloc[row_data_start:, date_col],
             errors="coerce"
         ),
-        "ETF코드": str(etf_code).strip().zfill(6),  # [수정됨] 코드 -> ETF코드
-        "ETF명": etf_name,                          # [수정됨] 코드명 -> ETF명
+        "코드": str(etf_code).strip().zfill(6),      # [수정됨] ETF코드 -> 코드
+        "코드명": etf_name,                          # [수정됨] ETF명 -> 코드명
         "유형": etf_type,
         "아이템코드": item_code,
         "아이템명": item_name,
@@ -92,7 +92,6 @@ for j in range(1, raw.shape[1]):
         ),
     })
 
-    # [수정됨] Date -> 날짜
     temp = temp.dropna(subset=["날짜"])
     records.append(temp)
 
@@ -134,8 +133,8 @@ print("\nPanel 변환 시작")
 df_panel = df_long.pivot_table(
     index=[
         "날짜", 
-        "ETF코드",  # [수정됨] 코드 -> ETF코드
-        "ETF명",    # [수정됨] 코드명 -> ETF명
+        "코드",     # [수정됨] ETF코드 -> 코드
+        "코드명",   # [수정됨] ETF명 -> 코드명
         "유형"
     ],
     columns="아이템명",
