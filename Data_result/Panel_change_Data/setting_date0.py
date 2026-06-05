@@ -50,7 +50,10 @@ df["Fee_bps"] = df["TER 보수"] * 100
 df["상장주식수(주)"] = df["상장주식수(주)"].replace(0, np.nan)
 df["daily_turnover"] = (df["거래량(주)"] / df["상장주식수(주)"]) * 100
 df["daily_turnover"] = df["daily_turnover"].replace([np.inf, -np.inf], np.nan)
-df["Return_pct"] = df["수정주가수익률(%)"]
+
+# ★ [요청사항 반영] 수정주가수익률 삭제하고 구성종목수 및 수정주가(원) 추가 및 수치화 예외 처리
+df["구성종목수"] = pd.to_numeric(df["구성종목수"], errors="coerce")
+df["수정주가(원)"] = pd.to_numeric(df["수정주가(원)"], errors="coerce")
 
 # 상장폐지 더미 변수 (실제 폐지 날짜가 존재하는 경우만 1, 유지 중이면 0)
 df["Is_Delisted"] = np.where(df["상장폐지일"].notna(), 1, 0)
