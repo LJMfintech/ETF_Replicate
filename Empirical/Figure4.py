@@ -47,20 +47,21 @@ if not col_aum or not col_fee:
 df_data[col_date] = pd.to_datetime(df_data[col_date], errors='coerce').dt.normalize()
 
 if col_listing_date in df_list.columns:
+    # df_listing_date를 df_list[col_listing_date]로 올바르게 수정
     df_list[col_listing_date] = pd.to_datetime(df_list[col_listing_date], errors='coerce').dt.normalize()
 
-# ETF 종목코드 통일 (CSV)
-df_data[col_code] = df_data[col_code].astype(str).str.replace(r'[^0-9]', '', regex=True).str.zfill(6)
+# 🛠️ [수정] 알파벳 코드 유지: 공백 제거 후 모두 대문자로 통일 (CSV)
+df_data[col_code] = df_data[col_code].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
 
-# ETF 종목코드 통일 (Excel - df_list)
+# 🛠️ [수정] 알파벳 코드 유지: 공백 제거 후 모두 대문자로 통일 (Excel - df_list)
 if '종목코드' in df_list.columns:
-    df_list['종목코드'] = df_list['종목코드'].astype(str).str.replace(r'[^0-9]', '', regex=True).str.zfill(6)
+    df_list['종목코드'] = df_list['종목코드'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
     df_list = df_list.rename(columns={'종목코드': col_code})
 elif '코드' in df_list.columns:
-    df_list['코드'] = df_list['코드'].astype(str).str.replace(r'[^0-9]', '', regex=True).str.zfill(6)
+    df_list['코드'] = df_list['코드'].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
     df_list = df_list.rename(columns={'코드': col_code})
 elif col_code in df_list.columns:
-    df_list[col_code] = df_list[col_code].astype(str).str.replace(r'[^0-9]', '', regex=True).str.zfill(6)
+    df_list[col_code] = df_list[col_code].astype(str).str.replace(r'\s+', '', regex=True).str.upper()
 
 # 값 데이터 숫자형 변환
 df_data[col_aum] = pd.to_numeric(df_data[col_aum].astype(str).str.replace(',', ''), errors='coerce')
@@ -86,13 +87,19 @@ def calculate_differentiation_at_date(target_date_obj, active_etfs):
 
     market_weights = {}
     
-    # 💥 누락 종목 분석을 위한 추적 백그라운드 리스트 생성
+    # 누락 종목 분석을 위한 추적 백그라운드 리스트 생성
     missing_files_list = []
     empty_files_list = []
 
     for idx, etf_code in enumerate(active_etfs, 1):
+        # 🛠️ [수정] 대소문자 혼용 파일명 매칭 방어 로직 추가
         file_pattern = os.path.join(pdf_folder, f"*{etf_code}*.xlsx")
         matched_files = glob.glob(file_pattern)
+
+        if not matched_files:
+            # 대문자로 안 매칭될 경우 소문자 패턴으로도 한 번 더 시도
+            file_pattern_lower = os.path.join(pdf_folder, f"*{etf_code.lower()}*.xlsx")
+            matched_files = glob.glob(file_pattern_lower)
 
         if matched_files:
             file_path = matched_files[0]
@@ -142,7 +149,7 @@ def calculate_differentiation_at_date(target_date_obj, active_etfs):
 
     print(f"\n=> 📂 수집 완료 (성공: {len(market_weights)}개 | 누락: {len(missing_files_list)}개 | 내용없음/날짜미매칭: {len(empty_files_list)}개)")
 
-    # 💥 [추가 로직] 인간용 가독성 마스터 결합 처리 (엑셀 데이터 기준 매칭)
+    # [추가 로직] 인간용 가독성 마스터 결합 처리 (엑셀 데이터 기준 매칭)
     name_col = '코드명' if '코드명' in df_list.columns else next((c for c in df_list.columns if '명' in c or '이름' in c), None)
 
     if len(missing_files_list) > 0:
