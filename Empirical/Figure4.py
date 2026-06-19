@@ -219,7 +219,7 @@ def process_market_snapshot(date_str):
     df_merged = pd.merge(df_merged, df_list[[col_code, col_category]], on=col_code, how='left')
 
     if df_merged[col_fee].max() <= 1.0:
-        df_merged['Fee_bps'] = df_merged[col_fee] * 10000
+        df_merged['Fee_bps'] = df_merged[col_fee] * 100
     else:
         df_merged['Fee_bps'] = df_merged[col_fee]
 
@@ -271,6 +271,8 @@ print("="*80)
 # ==========================================
 # 4. 버블 차트 시각화
 # ==========================================
+import matplotlib.patches as mpatches  # ★ 범례용 네모 상자 패치 생성을 위해 임포트
+
 print("\n📊 버블 차트를 렌더링합니다...")
 fig, axes = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
 aum_scale = 1e-9
@@ -282,15 +284,23 @@ def plot_panel(ax, data, title):
         b_data = data[data[col_category] == 'Broad-based']
         s_data = data[data[col_category] == 'Specialized']
         
+        # 그래프 본문에는 기존 방식 그대로 '원' 형태로 플롯팅
         if len(b_data) > 0:
             ax.scatter(b_data['Product_Differentiation'], b_data['Fee_bps'], s=b_data[col_aum] * aum_scale, 
-                       facecolors='none', edgecolors='blue', linewidths=1.5, label='Broad-based ETFs')
+                       facecolors='none', edgecolors='blue', linewidths=1.5)
         if len(s_data) > 0:
             ax.scatter(s_data['Product_Differentiation'], s_data['Fee_bps'], s=s_data[col_aum] * aum_scale, 
-                       facecolors='none', edgecolors='red', linewidths=1.5, label='Specialized ETFs')
+                       facecolors='none', edgecolors='red', linewidths=1.5)
                        
+        # ★ [수정] 범례(Legend)만 깔끔한 네모 색상 상자로 대체
         if len(b_data) > 0 or len(s_data) > 0:
-            ax.legend(loc='upper left', frameon=True, edgecolor='black')
+            # 네모 상자 패치 선언 (edgecolor와 facecolor를 주어 깔끔하게 표현)
+            legend_patches = [
+                mpatches.Patch(facecolor='none', edgecolor='blue', linewidth=1.5, label='Broad-based ETFs'),
+                mpatches.Patch(facecolor='none', edgecolor='red', linewidth=1.5, label='Specialized ETFs')
+            ]
+            # 수동 생성한 패치 핸들을 전송하여 범례 적용
+            ax.legend(handles=legend_patches, loc='upper left', frameon=True, edgecolor='black', fontsize=10)
     else:
         ax.text(0.5, 0.5, 'No Data', ha='center', va='center', fontsize=12)
 
@@ -300,8 +310,8 @@ def plot_panel(ax, data, title):
     ax.set_xlim(-5, 105)
     ax.grid(True, linestyle=':', alpha=0.5)
 
-plot_panel(axes[0], data_15, "A  Differentiation, fees, and AUM: 2015")
-plot_panel(axes[1], data_25, "B  Differentiation, fees, and AUM: 2025")
+plot_panel(axes[0], data_15, "A   Differentiation, fees, and AUM: 2015")
+plot_panel(axes[1], data_25, "B   Differentiation, fees, and AUM: 2025")
 
 max_y15 = data_15['Fee_bps'].max() if not data_15.empty and 'Fee_bps' in data_15.columns else 100
 max_y25 = data_25['Fee_bps'].max() if not data_25.empty and 'Fee_bps' in data_25.columns else 100

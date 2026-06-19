@@ -130,3 +130,45 @@ print("=" * 120 + "\n")
 
 table1_final.to_csv(output_table1_path, index=False, encoding="utf-8-sig")
 print(f"[완료] 시장조정수익률 연산이 포함된 최종 요약표가 저장되었습니다.\n 경로: {output_table1_path}\n")
+
+
+
+
+# ==========================================
+# [긴급 점검] Specialized ETF 구성종목 수 팩트 체크
+# ==========================================
+print("\n" + "🚨" * 20)
+print(" Specialized ETF 종목 수 이상치 정밀 검증을 시작합니다.")
+print("🚨" * 20)
+
+# 1. Specialized ETF만 필터링
+specialized_df = df[df["Category_clean"] == "specialized"]
+
+# 2. 각 ETF 코드별로 '평균 구성종목수'가 가장 많은 녀석들 TOP 10 추출
+top_holdings_etfs = (
+    specialized_df.groupby(["코드", "Category"])["구성종목수"]
+    .mean()
+    .reset_index()
+    .sort_values(by="구성종목수", ascending=False)
+)
+
+print("\n📊 [체크 1] 구성 종목 수가 가장 많은 Specialized ETF 상위 10개:")
+print(top_holdings_etfs.head(10).to_string(index=False))
+print("-" * 60)
+
+# 3. 데이터 자체에 결측치(NaN)나 0이 숨어있어 평균이 깎였는지 확인
+target_code = top_holdings_etfs["코드"].iloc[0] if not top_holdings_etfs.empty else None
+
+if target_code:
+    print(f"\n🔍 [체크 2] 가장 종목 수가 많은 ETF({target_code})의 원본 데이터 시계열 일부 확인:")
+    sample_etf = specialized_df[specialized_df["코드"] == target_code].sort_values("날짜")
+    print(sample_etf[["날짜", "코드", "구성종목수", "AUM_bn"]].head(5).to_string(index=False))
+    print("...")
+    print(sample_etf[["날짜", "코드", "구성종목수", "AUM_bn"]].tail(5).to_string(index=False))
+    
+    # 4. 전체 로우 수 대비 혹시 종목수가 0이나 1로 들어가 있는 에러가 있는지 체크
+    zero_holdings = (sample_etf["구성종목수"] <= 0).sum()
+    nan_holdings = sample_etf["구성종목s"].isna().sum() if "구성종목s" in sample_etf else sample_etf["구성종목수"].isna().sum()
+    print(f"\n⚠️ 해당 ETF의 총 데이터 일수: {len(sample_etf)}일 / 종목수 0인 날: {zero_holdings}일 / NaN인 날: {nan_holdings}일")
+
+print("=" * 60)
